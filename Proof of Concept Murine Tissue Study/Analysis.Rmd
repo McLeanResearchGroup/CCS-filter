@@ -1,0 +1,360 @@
+---
+title: "Analysis_092019"
+author: "B Rose"
+date: "9/30/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(here)
+```
+
+## Importing and cleaning data
+
+### Setting initial parameters
+
+Setting file locations, importing all raw features lists, setting initial parameters for appeding CCS data. 
+
+```{r init, echo = FALSE, warning = FALSE}
+progenesis.pos <- "Proof of Concept Murine Tissue Study/HD_Pos_IDs.csv"
+progenesis.neg <- "Proof of Concept Murine Tissue Study/HD_Neg_IDs.csv"
+agilent.pos <-"Proof of Concept Murine Tissue Study/agil_pos.xls"
+agilent.neg <-"Proof of Concept Murine Tissue Study/agil_neg.xls"
+blank.pos <- "Proof of Concept Murine Tissue Study/blank_pos.csv"
+blank.neg <- "Proof of Concept Murine Tissue Study/blank_neg.csv"
+
+suppressMessages(progp <- read_csv(here(progenesis.pos), skip = 1, col_names = TRUE, na = c("", "NA")))
+suppressMessages(progn <- read_csv(here(progenesis.neg), skip = 1, col_names =  TRUE, na = c("", "NA")))
+suppressMessages(agilp <- read_delim(here(agilent.pos), delim = "\t", skip = 3, col_names = TRUE)) 
+suppressMessages(agiln <- read_delim(here(agilent.neg), delim = "\t", skip = 3, col_names = TRUE))
+suppressMessages(blankp <- read_csv(here(blank.pos), col_names = TRUE, na = c("", "NA")))
+suppressMessages(blankn <- read_csv(here(blank.neg), col_names = TRUE, na = c("", "NA")))
+
+mztol <- 0.05 
+rttol <- 0.5
+
+datestamp <- format.Date(Sys.Date(), "%Y%m")
+
+head(progp, n = 1)
+head(agilp, n = 1)
+head(blankp, n = 1)
+message(paste("Mass tolerance: ", mztol, "Da"))
+message(paste("RT tolerance: ", rttol, "min."))
+```
+
+### Cleaning the data to the correct format
+
+Column names for important variables must match: 
+
+```{r clean, echo = FALSE}
+#AGILENT MP DATA
+#For this agilent dataset, the positive and negative analysis columns did not match.
+#More work is necessary. 
+agilp <- agilp[, -c(13, 17:20)]
+agiln <- agiln[, -c(16:19)]
+agilp$pol <- 'pos'
+agiln$pol <- 'neg'
+#merge the two polarities to clean them equally 
+agil <- rbind(agilp, agiln)
+agil$`m/z` <- as.numeric(agil$`m/z`)
+agil$CCS <- as.numeric(agil$CCS)
+agil$Z <- as.numeric(agil$Z)
+agil$CCSz <- abs(agil$CCS/agil$Z)
+agil$RSD <- as.numeric(agil$RSD)
+
+rm(agilp, agiln)
+
+#PROGENESIS OUTPUT
+colnames(progp)[2] <- "Compound.ID"
+colnames(progp)[which(colnames(progp) == 'm/z')] <- "m.z"
+colnames(progp)[which(colnames(progp) == "Retention time (min)")] <- "RT"
+colnames(progn)[2] <- "Compound.ID"
+colnames(progn)[which(colnames(progn) == 'm/z')] <- "m.z"
+colnames(progn)[which(colnames(progn) == "Retention time (min)")] <- "RT"
+progp$m.z <- as.numeric(progp$m.z)
+progn$m.z <- as.numeric(progn$m.z)
+
+#BLANK PROGENESIS OUTPUT FILES
+colnames(blankp)[which(colnames(blankp) == 'm/z')] <- "m.z"
+colnames(blankn)[which(colnames(blankn) == 'm/z')] <- "m.z"
+blankp$m.z <- as.numeric(blankp$m.z)
+blankn$m.z <- as.numeric(blankn$m.z)
+
+
+head(agil, n = 1)
+head(progp, n = 1)
+head(blankp, n = 1)
+```
+
+### Blank subtraction
+
+Progenesis output is generated for blanks to subtract features that appear in the blanks. 
+
+```{r blank subtract, echo = FALSE, warning = FALSE}
+source(here("Function scripts/blanksub.R"))
+progp <- .blankSubtract(progp, blankp)
+progn <- .blankSubtract(progn, blankn)
+
+message("The average number of IDs per feature is ", round((nrow(progp) + nrow(progn))/(length(unique(progp$Compound)) + length(unique(progn$Compound)))), ".")
+```
+
+
+### Appending CCS to Progenesis data
+
+Apprending CCS data from Mass Profiler output is performed separately for pos and neg modes in order to keep it as clean as possible. 
+
+```{r append, echo = FALSE, warning = FALSE}
+source(here("Function scripts/append.R"))
+
+ccsids.pos <- .appendCCS(progp, subset(agil, pol == 'pos'))
+ccsids.neg <- .appendCCS(progn, subset(agil, pol == 'neg'))
+
+#Joining pos and neg mode and cleaning the resulting table
+suppressMessages(ccsids <- full_join(ccsids.neg, ccsids.pos))
+ccsids <- ccsids[, c(1, 2, 11, 12, 4, 5, 14, 15, 16, 26)]
+columns <- c("Compound","Compound.ID","Link","Description", "Adducts","Formula","m.z","Charge",
+             "RT","CCS")
+n <- numeric()
+for(i in seq_along(columns)){
+  n[i] <- which(colnames(ccsids) == columns[i])
+}
+ccsids <- ccsids[, n]
+colnames(ccsids) <- c("Feature", "ID", "Link", "Name", "Adducts", "Formula", "mz", 
+                      "Charge", "RT", "CCS")
+ccsids$Kingdom <- "Organic Compounds"
+ccsids$SuperClass <- NA
+ccsids$Class <- NA
+ccsids$Subclass <- NA
+ccsids$inchi <- NA
+rm(ccsids.pos, ccsids.neg)
+
+head(ccsids, n = 1)
+message(paste(length(unique(ccsids$Feature)), "total features with a CCS."))
+
+#optional: save pre-filtered ID list and counts
+# write_csv(ccsids, paste0(datestamp, "_prefilter_IDs.csv"))
+# ccsids %>% 
+#   count(Feature) %>% 
+#   write.csv(., paste0(datestamp, "_prefilter_counts.csv"))
+```
+
+## Classifying data
+
+This step is the most time intensive and requires manual attention even when using classification packages. 
+
+Most classification steps are commented out in this proof of concept analysis file to save time. The fully classified dataset is imported in before the filtering steps. 
+
+### LipidBlast classifications
+
+This assigns classifications to feature IDs from LipidBlast library. These IDs do not match standard chemical names because of the use of more common abbreviations (PC, PE, etc.). Therefore, these are classified separately from the rest of the IDs. 
+
+```{r lipidblast, echo = FALSE}
+source(here("Function scripts/classy.R"))
+ccsids <- .blastClassy(data = ccsids, here("Function scripts/lipidblast_classify.csv"))
+```
+
+### Assign InChI Keys
+
+Using the R package 'webchem', the Chemical Translation Service (cts) can be reached from the R interface, allowing automatic assignment of many InChIs without the need to write a .csv and put it into the web browser separately. 
+
+
+```{r inchi, include = FALSE, echo = FALSE}
+#checking which already classified IDs are repeated here
+
+# # classyids <- read_csv("~/Box Sync/LipidFilter/201908_HD/20190822_finalclassified.csv")
+# classyids <- read_csv("202011_helpclassify.csv")
+# 
+# for(i in seq_along(ccsids$ID)){
+#   id <- ccsids[i,]
+#   name <- id$Name
+#   matches <- classyids[which(classyids$Name == name),]
+#   if(nrow(matches) != 0){
+#     ccsids[i,]$SuperClass <- matches[1,]$SuperClass
+#     ccsids[i,]$Class  <- matches[1,]$Class
+#     ccsids[i,]$Subclass  <- matches[1,]$Subclass
+#   }
+# }
+# # 
+# ccsids <- .addInchi(ccsids)
+```
+
+### Manual classificaiton
+
+The IDs with InChI keys assigned are entered into the ClassyFire webapp. Those that still have no classification are then assigned by hand. 
+
+
+```{r classy, echo = FALSE, echo = FALSE}
+# ided <- read_csv("202011_helpclassify.csv", col_names = TRUE, na = c("", "NA"))
+# 
+#output file to work on the classifications by hand
+# write.csv(ccsids, "202012_helpclassify.csv")
+```
+
+## Run model scripts
+
+```{r models, include = FALSE}
+source(here("Function scripts/models_classes.R"))
+source(here("Function scripts/models_subclasses.R"))
+AICs <- subset(AICs, !is.na(AICs$V6))
+subAICs <- subset(subAICs, !is.na(subAICs$V6))
+```
+
+```{r models output, echo = FALSE}
+message(paste(length(fitteddata), "class models and", length(subfitteddata), 
+              "subclass models."))
+message("Classes: ")
+names(fitteddata)
+message("Subclasses: ")
+names(subfitteddata)
+```
+
+## Filtering
+### Broad filter: class specific rejection
+
+```{r broad filter, echo = FALSE, warning=FALSE}
+#read in previously classified IDs
+suppressMessages(ccsids <- read_csv(here("Proof of Concept Murine Tissue Study/classified_ids.csv"))) 
+                 
+source(here("Function scripts/filter.R"))
+
+#cleaning up naming discrepancies
+ccsids <- ccsids[, -1]
+ccsids$mz <- as.numeric(ccsids$mz)
+ccsids$Charge <- as.numeric(ccsids$Charge)
+ccsids$ccsz <- abs(ccsids$CCS/ccsids$Charge)
+ccsids$Class <- as.character(ccsids$Class)
+ccsids$SuperClass <- as.character(ccsids$SuperClass)
+ccsids$SuperClass <- ifelse(ccsids$SuperClass == "Lipids and lipid-like molecules", 
+                            "Lipids and Lipid-like Molecules", ccsids$SuperClass)
+ccsids$SuperClass <- ifelse(ccsids$SuperClass == "Lipids and Lipid-like molecules", 
+                            "Lipids and Lipid-like Molecules", ccsids$SuperClass)
+ccsids$Class <- ifelse(ccsids$Class == "Fatty acyls", 
+                            "Fatty Acyls", ccsids$Class)
+ccsids$Subclass <- ifelse(ccsids$Subclass == "Glycerophosphocholine", 
+                       "Glycerophosphocholines", ccsids$Subclass)
+ccsids$Subclass <- ifelse(ccsids$Subclass == "Cycloartanols and deratives", 
+                          "Cycloartanols and derivatives", ccsids$Subclass)
+
+#input for models is the dataframes that come from them. 
+ccsids <- suppressWarnings(.broadFilter(ids = subset(ccsids, !is.na(Class)), models = c(fitteddata, subfitteddata)))
+
+message(length(unique(subset(ccsids, Conf != 0)$Feature)), " features have been filtered. ", 
+        length(unique(subset(ccsids, Conf > 0)$Feature)), " features have IDs that have passed the filter.")
+```
+
+
+### Fine filter: feature-specific analysis
+```{r fine filter, echo = FALSE}
+#input to fine filter should be a subset of ccsids that have conf = 1
+#input for models is the actal models, not their dataframes
+ids <- .fineFilter(ids = subset(ccsids, Conf == 1), models = models, 
+                   AICs = rbind(AICs, subAICs))
+
+for(j in 1:nrow(ids)){
+  id <- ids[j,]
+  match <- which(ccsids$Feature == id$Feature & ccsids$ID == id$ID)
+  ccsids[match,]$Conf <- id$Conf
+}
+
+ccsids$Conf <- as.numeric(ccsids$Conf)
+
+message(length(unique(subset(ccsids, Conf > 2)$Feature)), " features have passed the filter.")
+
+#change confidence score so that if IDs that passed the fine filter are as confident as those 
+#that passed the broad filter and had only one subclass
+ccsids$Conf <- ifelse(ccsids$Conf == 3, 2, ccsids$Conf)
+ccsids$Conf <- ifelse(ccsids$Conf == 5, 3, ccsids$Conf)
+
+
+message("Confidence scores: ")
+plyr::count(ccsids$Conf)
+
+rm(ids, AICs, models, fitteddata, dat, fourtable, subAICs)
+```
+Confidence level key:
+
+Score | Description
+------------- | -------------
+-1 | Did not pass the broad filter
+0 | No Compendium model
+1 | Passed the broad filter
+2 | Passed the broad filter and had IDs from only one subclass OR passed the fine filter once
+">2" | Passed the fine filter twice (class and subclass level)
+
+## Scoring and Exporting
+
+### Merging data back to the Progenesis files
+
+This adds back in information relating to the statistical analysis of the dataset, i.e. fold change, p value. Also adds back in the scores from fragmentation and accurate mass/isotope distribution.
+
+```{r Progenesis merge, echo = FALSE}
+#clean up the Progenesis table
+prog <- full_join(progn, progp)
+prog <- prog[,c(1, 2, 4:6, 7, 8, 11:17, 19)]
+
+colnames(prog) <- c("Feature", "ID", "Adducts", "Formula", "Score", "Frag Score",
+                    "ppm Error", "Link", "Name", "Neutral Mass", "mz", "Charge", 
+                    "RT", "p value", "FC")
+prog$mz <- as.numeric(prog$mz)
+prog$Charge <- as.numeric(prog$Charge)
+prog$RT <- as.numeric(prog$RT)
+
+#join with ccs ids table
+merged <- left_join(prog, ccsids, by = c("Feature", "ID", "Name"))
+colnames(merged)[which(colnames(merged)=='Score')] <- "ProgScore"
+rm(progp, progn, prog)
+head(merged, n = 1)
+```
+
+### Scoring based on IM filter
+
+This builds upon the existing Progenesis scoring system:
+
+Information | Contribution
+------------- | -------------
+Accurate mass | 20
+Isotope distribution | 20
+Retention time | 20
+MS/MS match | 20
+Ion mobility | 20
+
+Here, I assign 10 additional points for passing the broad filter, or 20 additional points for passing both filters. 
+
+```{r score, echo = FALSE}
+merged$Score <- as.numeric(merged$ProgScore)
+merged$Conf <- ifelse(is.na(merged$Conf), 0, merged$Conf)
+
+merged$Score <- ifelse(merged$Conf == 1, merged$Score + 10, merged$Score)
+merged$Score <- ifelse(merged$Conf == 2, merged$Score + 15, merged$Score)
+merged$Score <- ifelse(merged$Conf == 3, merged$Score + 20, merged$Score)
+
+summary(merged$Score)
+```
+
+### Choosing an ID class and exporting
+
+For each of the features that have been filtered, a set of IDs with the maximum combined score is chosen and the dataframe of these IDs is exported. These are high-confidence IDs. 
+
+```{r export, echo = FALSE}
+highconf <- subset(merged, Conf > 0)
+choose <- data.frame()
+features <- unique(highconf$Feature)
+for(i in seq_along(features)){
+  matches <- highconf[which(highconf$Feature == features[i]),]
+  max <- matches[which(matches$Score == max(matches$Score)),]
+  choose <- rbind(choose, max)
+}
+
+message("The average number of IDs per feature for the filtered features is ", round(nrow(choose)/length(features)), ".")
+
+outputloc <- paste0(datestamp, "_highconfids.csv")
+write_csv(choose, outputloc)
+
+#optional: export ID counts for each feature
+choose %>% 
+  count(Feature) %>% 
+  write_csv(paste0(datestamp, "_postfilter_counts.csv"))
+```
