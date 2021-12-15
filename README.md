@@ -13,15 +13,16 @@ This repository includes the scripts used for the CCS filtering workflow describ
   - **models_subclasses.R**
 * **Filtering functions**: all filtering functions for both the broad (class specific) and fine (feature specific) filters are included in the **filter.R** script. This requires output from the Compendium regression model scripts to run.
 
-#### Proof of Concept Murine Tissue Study
+#### Proof of Concept Murine Tissue Study: 
 * **Analysis.Rmd** full analysis workbook for the data analysis reported in the manuscript, including data cleaning, molecular classification, filtering, and output steps
 * **Raw data output files**: 
   - Progenesis output files for features with tentative identifications (**HD_Pos_IDs.csv** and **HD_Neg_IDs.csv**)
   - Progenesis output files for features in the "blank" data files (**blank_pos.csv** and **blank_neg.csv**)
   - Mass Profiler output for IM features with CCS values (**agil_pos.xls** and **agil_neg.xls**)
+  - Complete cleaned dataset with classified IDs (**classified_ids.csv**)
 * **Sample filter output**:
-  - Analysis markdown report html file: **Analysis.html**
-  - Sample filter output data with higher confidence identifications: **sampleoutput_highconfids.csv**
+  - Analysis markdown report html file (**Analysis.html**)
+  - Sample filter output data with higher confidence identifications (**sampleoutput_highconfids.csv**)
 
 
 ### To run analysis with included test data:
