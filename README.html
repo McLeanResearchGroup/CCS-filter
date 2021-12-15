@@ -368,8 +368,45 @@ summary {
 <div id="ccs-filter" class="section level1">
 <h1>CCS-filter</h1>
 <p>This repository includes the scripts used for the CCS filtering workflow described in the accompanying manuscript <em>“Improving Confidence in Lipidomic Annotations by Incorporating Empirical Ion Mobility Regression Analysis and Chemical Class Prediction” (Rose, et. al.)</em></p>
-<div id="to-run-with-included-test-data" class="section level3">
-<h3>To run with included test data:</h3>
+<div id="included-folders" class="section level3">
+<h3>Included folders:</h3>
+<div id="function-scripts" class="section level4">
+<h4>Function scripts:</h4>
+<ul>
+<li>Functions built to assist in data clean up and analysis:
+<ul>
+<li><strong>append.R</strong> appends CCS data to the feature list</li>
+<li><strong>classy.R</strong> includes functions to help with molecular classification</li>
+<li><strong>blanksub.R</strong> subtracts features that also appear in the blank feature list</li>
+</ul></li>
+<li>Compendium regression model scripts: both require a copy of the Compendium csv to run (included in folder)
+<ul>
+<li><strong>models_classes.R</strong></li>
+<li><strong>models_subclasses.R</strong></li>
+</ul></li>
+<li><strong>Filtering functions</strong>: all filtering functions for both the broad (class specific) and fine (feature specific) filters are included in the <strong>filter.R</strong> script. This requires output from the Compendium regression model scripts to run.</li>
+</ul>
+</div>
+<div id="proof-of-concept-murine-tissue-study" class="section level4">
+<h4>Proof of Concept Murine Tissue Study</h4>
+<ul>
+<li><strong>Analysis.Rmd</strong> full analysis workbook for the data analysis reported in the manuscript, including data cleaning, molecular classification, filtering, and output steps</li>
+<li><strong>Raw data output files</strong>:
+<ul>
+<li>Progenesis output files for features with tentative identifications (<strong>HD_Pos_IDs.csv</strong> and <strong>HD_Neg_IDs.csv</strong>)</li>
+<li>Progenesis output files for features in the “blank” data files (<strong>blank_pos.csv</strong> and <strong>blank_neg.csv</strong>)</li>
+<li>Mass Profiler output for IM features with CCS values (<strong>agil_pos.xls</strong> and <strong>agil_neg.xls</strong>)</li>
+</ul></li>
+<li><strong>Sample filter output</strong>:
+<ul>
+<li>Analysis markdown report html file: <strong>Analysis.html</strong></li>
+<li>Sample filter output data with higher confidence identifications: <strong>sampleoutput_highconfids.csv</strong></li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="to-run-analysis-with-included-test-data" class="section level3">
+<h3>To run analysis with included test data:</h3>
 <ul>
 <li>Clone the repository</li>
 <li>Set the local repository folder as the working directory in R</li>
