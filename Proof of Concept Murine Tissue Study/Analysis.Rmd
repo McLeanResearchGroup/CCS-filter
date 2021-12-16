@@ -1,5 +1,5 @@
 ---
-title: "Analysis_092019"
+title: "Analysis of Murine Tissue Data"
 author: "B Rose"
 date: "9/30/2019"
 output: html_document
@@ -7,8 +7,6 @@ output: html_document
 
 ```{r setup, include=FALSE}
 library(tidyverse)
-library(ggplot2)
-library(plotly)
 library(here)
 ```
 
@@ -272,7 +270,7 @@ ccsids$Conf <- ifelse(ccsids$Conf == 5, 3, ccsids$Conf)
 message("Confidence scores: ")
 plyr::count(ccsids$Conf)
 
-rm(ids, AICs, models, fitteddata, dat, fourtable, subAICs)
+rm(ids, AICs, models, fitteddata, subAICs)
 ```
 Confidence level key:
 
